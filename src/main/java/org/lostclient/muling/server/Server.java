@@ -14,29 +14,63 @@ import org.lostclient.muling.messages.AbstractMessage;
 import org.lostclient.muling.messages.MessageType;
 import org.lostclient.muling.messages.client.MuleRequestMessage;
 import org.lostclient.muling.messages.client.OwnedItemsUpdateMessage;
-import org.lostclient.muling.messages.client.RegisterRequestMessage;
 import org.lostclient.muling.messages.client.TradeRequestMessage;
 import org.lostclient.muling.messages.server.MuleResponseMessage;
-import org.lostclient.muling.messages.server.RegisterResponseMessage;
 import org.lostclient.muling.messages.server.TradeResponseMessage;
 
 import java.net.InetSocketAddress;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.locks.ReentrantLock;
 
 public class Server extends WebSocketServer
 {
-	private final ReentrantLock connIndexMutex = new ReentrantLock();
 	private long connIndex = 0L;
-	private final Map<Long, Client> clients = new ConcurrentHashMap<>();
-	private final List<Request> requests = new CopyOnWriteArrayList<>();
+	private final Map<Long, Client> clients = new HashMap<>();
+	private final List<Request> requests = new ArrayList<>();
 
 	public Server(int port)
 	{
 		super(new InetSocketAddress(port));
+	}
+
+	private synchronized Client getClientFromConn(WebSocket conn, ClientHandshake handshake)
+	{
+		if (handshake.getFieldValue("clientUsername").length() == 0
+				|| handshake.getFieldValue("playerName").length() == 0
+				|| handshake.getFieldValue("isMule").length() == 0
+				|| handshake.getFieldValue("isMember").length() == 0)
+		{
+			conn.close(10001, "Invalid or missing handshake data");
+			return null;
+		}
+
+		String clientUsername = handshake.getFieldValue("clientUsername");
+		String playerName = handshake.getFieldValue("playerName");
+		boolean isMule = handshake.getFieldValue("isMule").equals("true");
+		boolean isMember = handshake.getFieldValue("isMember").equals("true");
+
+		conn.setAttachment(connIndex);
+
+		Client client = new Client(conn, connIndex, System.currentTimeMillis(), clientUsername, playerName, isMule, isMember);
+
+		clients.put(connIndex, client);
+
+		connIndex++;
+
+		return client;
+	}
+
+	private synchronized Client getClientFromConn(WebSocket conn)
+	{
+		long connIndex = conn.<Long>getAttachment();
+		return clients.getOrDefault(connIndex, null);
+	}
+
+	private synchronized void removeClient(Client client)
+	{
+		clients.remove(client.getConnIndex());
 	}
 
 	@Override
@@ -48,26 +82,22 @@ public class Server extends WebSocketServer
 	@Override
 	public void onOpen(WebSocket conn, ClientHandshake handshake)
 	{
-		connIndexMutex.lock();
-		conn.setAttachment(connIndex);
-		Client client = new Client(conn, connIndex, System.currentTimeMillis());
-		Log.info("A new client has connected: " + conn.getRemoteSocketAddress() + " - connIndex: " + connIndex);
-		clients.put(connIndex, client);
-		connIndex++;
-		connIndexMutex.unlock();
+		Client client = getClientFromConn(conn, handshake);
+		if (client != null)
+		{
+			Log.info("A client connected: " + client);
+		}
 	}
 
 	@Override
 	public void onClose(WebSocket conn, int code, String reason, boolean remote)
 	{
 		Client client = getClientFromConn(conn);
-		if (client == null)
+		if (client != null)
 		{
-			Log.severe("An unknown client disconnected from the server: " + conn.getRemoteSocketAddress() + " - " + code + " - " + reason);
-			return;
+			Log.info("A client disconnected: " + client + " - code: " + code + " - reason: " + reason);
+			removeClient(client);
 		}
-		Log.info("A client has disconnected from the server: " + conn.getRemoteSocketAddress() + " - " + code + " - " + reason);
-		clients.remove(client.getConnIndex());
 	}
 
 	@Override
@@ -99,15 +129,15 @@ public class Server extends WebSocketServer
 
 			switch (messageType)
 			{
-				case REGISTER_REQUEST:
-					RegisterRequestMessage registerRequest = new Gson().fromJson(jsonElement, RegisterRequestMessage.class);
-					client.setMule(true);
-					client.setWorldId(registerRequest.worldId);
-					client.setTile(registerRequest.tile);
-					client.setPlayerName(registerRequest.playerName);
-					client.setHasMembership(registerRequest.hasMembership);
-					send(conn, new RegisterResponseMessage(true));
-					break;
+//				case REGISTER_REQUEST:
+//					RegisterRequestMessage registerRequest = new Gson().fromJson(jsonElement, RegisterRequestMessage.class);
+//					client.setMule(true);
+//					client.setWorldId(registerRequest.worldId);
+//					client.setTile(registerRequest.tile);
+//					client.setPlayerName(registerRequest.playerName);
+//					client.setMember(registerRequest.hasMembership);
+//					send(conn, new RegisterResponseMessage(true));
+//					break;
 
 				case OWNED_ITEMS_UPDATE:
 					OwnedItemsUpdateMessage ownedItemsUpdate = new Gson().fromJson(jsonElement, OwnedItemsUpdateMessage.class);
@@ -150,26 +180,11 @@ public class Server extends WebSocketServer
 	@Override
 	public void onError(WebSocket conn, Exception ex)
 	{
-		if (conn == null)
-		{
-			Log.severe("Unknown client connection error: " + ex + " - " + ex.getMessage());
-			return;
-		}
-
 		Client client = getClientFromConn(conn);
-		if (client == null)
+		if (client != null)
 		{
-			Log.severe("Unknown client connection error: " + conn.getRemoteSocketAddress() + " - " + ex + " - " + ex.getMessage());
-			return;
+			Log.info("A client caused an error: " + client + " - " + ex);
 		}
-
-		Log.info("A client caused an error: " + conn.getRemoteSocketAddress() + " - " + ex + " - " + ex.getMessage());
-	}
-
-	private Client getClientFromConn(WebSocket conn)
-	{
-		long connIndex = conn.<Long>getAttachment();
-		return clients.getOrDefault(connIndex, null);
 	}
 
 	public void send(WebSocket conn, AbstractMessage message)
