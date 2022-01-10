@@ -12,12 +12,15 @@ import org.lostclient.muling.Log;
 import org.lostclient.muling.Request;
 import org.lostclient.muling.messages.AbstractMessage;
 import org.lostclient.muling.messages.MessageType;
+import org.lostclient.muling.messages.MuleTile;
 import org.lostclient.muling.messages.client.MuleRequestMessage;
 import org.lostclient.muling.messages.client.OwnedItemsUpdateMessage;
+import org.lostclient.muling.messages.client.TradeCompletedMessage;
 import org.lostclient.muling.messages.client.TradeRequestMessage;
 import org.lostclient.muling.messages.server.MuleResponseMessage;
 import org.lostclient.muling.messages.server.TradeResponseMessage;
 
+import java.awt.image.TileObserver;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -50,10 +53,33 @@ public class Server extends WebSocketServer
 		String playerName = handshake.getFieldValue("playerName");
 		boolean isMule = handshake.getFieldValue("isMule").equals("true");
 		boolean isMember = handshake.getFieldValue("isMember").equals("true");
+		int muleWorldId = 0;
+		MuleTile muleTile = null;
+
+		if (isMule)
+		{
+			if (handshake.getFieldValue("worldId").length() == 0
+					|| handshake.getFieldValue("tileX").length() == 0
+					|| handshake.getFieldValue("tileY").length() == 0
+					|| handshake.getFieldValue("tileZ").length() == 0)
+			{
+				conn.close(10002, "Invalid or missing mule handshake data");
+				return null;
+			}
+			muleWorldId = Integer.parseInt(handshake.getFieldValue("worldId"));
+			muleTile = new MuleTile(
+					Integer.parseInt(handshake.getFieldValue("tileX")),
+					Integer.parseInt(handshake.getFieldValue("tileY")),
+					Integer.parseInt(handshake.getFieldValue("tileZ"))
+			);
+		}
 
 		conn.setAttachment(connIndex);
 
 		Client client = new Client(conn, connIndex, System.currentTimeMillis(), clientUsername, playerName, isMule, isMember);
+
+		client.setWorldId(muleWorldId);
+		client.setTile(muleTile);
 
 		clients.put(connIndex, client);
 
@@ -147,6 +173,19 @@ public class Server extends WebSocketServer
 
 				case MULE_REQUEST:
 					MuleRequestMessage muleRequest = new Gson().fromJson(jsonElement, MuleRequestMessage.class);
+					Request requestToRemove = null;
+					for (Request request : requests)
+					{
+						if (request.getMuleRequest().playerName.equals(muleRequest.playerName))
+						{
+							requestToRemove = request;
+							break;
+						}
+					}
+					if (requestToRemove != null)
+					{
+						requests.remove(requestToRemove);
+					}
 					Client mule = findMuleForRequest(muleRequest);
 					if (mule == null)
 					{
@@ -169,11 +208,27 @@ public class Server extends WebSocketServer
 						}
 					}
 					break;
+
+				case TRADE_COMPLETED:
+					TradeCompletedMessage tradeCompleted = new Gson().fromJson(jsonElement, TradeCompletedMessage.class);
+					Request requestToRemove2 = null;
+					for (Request request : requests)
+					{
+						if (request.getMuleRequest().requestId.equals(tradeCompleted.requestId))
+						{
+							requestToRemove2 = request;
+							break;
+						}
+					}
+					if (requestToRemove2 != null)
+					{
+						requests.remove(requestToRemove2);
+					}
 			}
 		}
 		catch (IllegalArgumentException ex)
 		{
-			System.out.println("Invalid message received");
+			ex.printStackTrace();
 		}
 	}
 
