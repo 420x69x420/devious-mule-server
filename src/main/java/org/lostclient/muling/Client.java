@@ -20,6 +20,7 @@ public class Client
 	private final long connectedAt;
 	private final String address;
 	private final String clientUsername;
+	private final String group;
 	private final String playerName;
 	private final boolean isMule;
 	private final boolean isMember;
@@ -27,13 +28,14 @@ public class Client
 	private MuleTile tile;
 	private final List<OwnedItem> ownedItems = new ArrayList<>();
 
-	public Client(WebSocket conn, long connIndex, long connectedAt, String clientUsername, String playerName, boolean isMule, boolean isMember)
+	public Client(WebSocket conn, long connIndex, long connectedAt, String clientUsername, String group, String playerName, boolean isMule, boolean isMember)
 	{
 		this.conn = conn;
 		this.connIndex = connIndex;
 		this.connectedAt = connectedAt;
 		this.address = conn.getRemoteSocketAddress().toString();
 		this.clientUsername = clientUsername;
+		this.group = group;
 		this.playerName = playerName;
 		this.isMule = isMule;
 		this.isMember = isMember;

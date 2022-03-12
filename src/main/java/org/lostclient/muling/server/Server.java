@@ -50,6 +50,7 @@ public class Server extends WebSocketServer
 		}
 
 		String clientUsername = handshake.getFieldValue("clientUsername");
+		String group = handshake.getFieldValue("group").length() > 0 ? handshake.getFieldValue("group") : "default";
 		String playerName = handshake.getFieldValue("playerName");
 		boolean isMule = handshake.getFieldValue("isMule").equals("true");
 		boolean isMember = handshake.getFieldValue("isMember").equals("true");
@@ -76,7 +77,7 @@ public class Server extends WebSocketServer
 
 		conn.setAttachment(connIndex);
 
-		Client client = new Client(conn, connIndex, System.currentTimeMillis(), clientUsername, playerName, isMule, isMember);
+		Client client = new Client(conn, connIndex, System.currentTimeMillis(), clientUsername, group, playerName, isMule, isMember);
 
 		client.setWorldId(muleWorldId);
 		client.setTile(muleTile);
@@ -186,7 +187,7 @@ public class Server extends WebSocketServer
 					{
 						requests.remove(requestToRemove);
 					}
-					Client mule = findMuleForRequest(muleRequest);
+					Client mule = findMuleForRequest(client.getGroup(), muleRequest);
 					if (mule == null)
 					{
 						send(conn, new MuleResponseMessage(false, muleRequest.requestId, 0, null));
@@ -253,14 +254,25 @@ public class Server extends WebSocketServer
 		conn.send(data);
 	}
 
-	private Client findMuleForRequest(MuleRequestMessage request)
+	private Client findMuleForRequest(String group, MuleRequestMessage request)
 	{
 		for (Client client : clients.values())
 		{
-			if (!client.isMule() || (request.requiredItems.size() > 0 && !client.hasRequiredItems(request.requiredItems)))
+			if (!client.isMule())
 			{
 				continue;
 			}
+
+			if (!client.getGroup().equals(group))
+			{
+				continue;
+			}
+
+			if (request.requiredItems.size() > 0 && !client.hasRequiredItems(request.requiredItems))
+			{
+				continue;
+			}
+
 			return client;
 		}
 		return null;
