@@ -1,6 +1,7 @@
 plugins {
     java
     application
+    id("com.github.johnrengelman.shadow") version "6.1.0"
 }
 
 group = "org.lostclient.muling"
@@ -21,6 +22,16 @@ dependencies {
     implementation(group = "org.java-websocket", name = "Java-WebSocket", version = "1.5.2")
 }
 
-application {
-    mainClass.set("org.lostclient.muling.server.Main")
+tasks {
+    application {
+        mainClass.set("org.lostclient.muling.server.Main")
+        mainClassName = "org.lostclient.muling.server.Main"
+    }
+
+    shadowJar {
+        archiveClassifier.set("shaded")
+        exclude("META-INF/*")
+        includeEmptyDirs = false
+        isPreserveFileTimestamps = false
+    }
 }
