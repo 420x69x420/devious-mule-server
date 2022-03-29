@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
 
 public class Server extends WebSocketServer
 {
@@ -193,30 +194,31 @@ public class Server extends WebSocketServer
 				case TRADE_REQUEST:
 				{
 					TradeRequestMessage tradeRequest = new Gson().fromJson(jsonElement, TradeRequestMessage.class);
-					for (Request request : requests)
-					{
-						if (request.getMuleRequest().requestId.equals(tradeRequest.requestId))
-						{
-							send(conn, new TradeResponseMessage(true, tradeRequest.requestId, request.getMule().getPlayerName()));
-							break;
-						}
-					}
+
+					requests.stream()
+							.filter(r -> r.getMuleRequest().requestId.equals(tradeRequest.requestId))
+							.findFirst()
+							.ifPresent(matchingRequest -> send(conn, new TradeResponseMessage(true, tradeRequest.requestId, matchingRequest.getMule().getPlayerName())));
+
 				}
 				break;
 
 				case TRADE_COMPLETED:
 				{
 					TradeCompletedMessage tradeCompleted = new Gson().fromJson(jsonElement, TradeCompletedMessage.class);
-					for (Request request : requests)
+
+					List<Request> matchingRequests = requests
+							.stream()
+							.filter(r -> r.getMuleRequest().requestId.equals(tradeCompleted.requestId))
+							.collect(Collectors.toList());
+
+					for (Request request : matchingRequests)
 					{
-						if (request.getMuleRequest().requestId.equals(tradeCompleted.requestId))
+						if (client.isMule())
 						{
-							if (client.isMule())
-							{
-								send(request.getClient().getConn(), tradeCompleted);
-							}
-							requests.remove(request);
+							send(request.getClient().getConn(), tradeCompleted);
 						}
+						requests.remove(request);
 					}
 				}
 				break;
@@ -224,12 +226,15 @@ public class Server extends WebSocketServer
 				case UNKNOWN_TRADER:
 				{
 					UnknownTraderMessage unknownTrader = new Gson().fromJson(jsonElement, UnknownTraderMessage.class);
-					for (Request request : requests)
+
+					List<Request> matchingRequests = requests
+							.stream()
+							.filter(r -> r.getMuleRequest().playerName.equals(unknownTrader.playerName))
+							.collect(Collectors.toList());
+
+					for (Request request : matchingRequests)
 					{
-						if (request.getMuleRequest().playerName.equals(unknownTrader.playerName))
-						{
-							send(request.getClient().getConn(), unknownTrader);
-						}
+						send(request.getClient().getConn(), unknownTrader);
 					}
 				}
 				break;
