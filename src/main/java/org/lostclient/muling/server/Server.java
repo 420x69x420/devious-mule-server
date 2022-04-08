@@ -88,6 +88,7 @@ public class Server extends WebSocketServer
 
 	private Client getClientFromConn(WebSocket conn)
 	{
+		if (conn == null) return null;
 		long connIndex = conn.<Long>getAttachment();
 		return clients.getOrDefault(connIndex, null);
 	}
