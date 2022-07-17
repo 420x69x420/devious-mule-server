@@ -4,11 +4,13 @@ import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import java.util.ArrayList;
 import org.java_websocket.WebSocket;
 import org.java_websocket.handshake.ClientHandshake;
 import org.java_websocket.server.WebSocketServer;
 import org.lostclient.muling.Client;
 import org.lostclient.muling.Log;
+import org.lostclient.muling.Random;
 import org.lostclient.muling.Request;
 import org.lostclient.muling.messages.AbstractMessage;
 import org.lostclient.muling.messages.MessageType;
@@ -260,6 +262,7 @@ public class Server extends WebSocketServer
 
 	private Client findMuleForRequest(String group, MuleRequestMessage request)
 	{
+		List<Client> validMules = new ArrayList<>();
 		for (Client client : clients.values())
 		{
 			if (!client.isMule())
@@ -277,8 +280,12 @@ public class Server extends WebSocketServer
 				continue;
 			}
 
-			return client;
+			validMules.add(client);
 		}
-		return null;
+		if (validMules.size() == 0)
+		{
+			return null;
+		}
+		return validMules.get(Random.asInt(0, validMules.size() - 1));
 	}
 }
