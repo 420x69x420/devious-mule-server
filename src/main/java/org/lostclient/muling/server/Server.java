@@ -103,7 +103,7 @@ public class Server extends WebSocketServer
 	@Override
 	public void onStart()
 	{
-		Log.info("LostMuleServer started!");
+		Log.info("LostMuleServer started on port: " + getPort());
 	}
 
 	@Override
