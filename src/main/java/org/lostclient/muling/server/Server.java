@@ -4,7 +4,13 @@ import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import java.net.InetSocketAddress;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
 import org.java_websocket.WebSocket;
 import org.java_websocket.handshake.ClientHandshake;
 import org.java_websocket.server.WebSocketServer;
@@ -15,16 +21,13 @@ import org.lostclient.muling.Request;
 import org.lostclient.muling.messages.AbstractMessage;
 import org.lostclient.muling.messages.MessageType;
 import org.lostclient.muling.messages.MuleTile;
-import org.lostclient.muling.messages.client.*;
+import org.lostclient.muling.messages.client.MuleRequestMessage;
+import org.lostclient.muling.messages.client.OwnedItemsUpdateMessage;
+import org.lostclient.muling.messages.client.TradeCompletedMessage;
+import org.lostclient.muling.messages.client.TradeRequestMessage;
+import org.lostclient.muling.messages.client.UnknownTraderMessage;
 import org.lostclient.muling.messages.server.MuleResponseMessage;
 import org.lostclient.muling.messages.server.TradeResponseMessage;
-
-import java.net.InetSocketAddress;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.stream.Collectors;
 
 public class Server extends WebSocketServer
 {
@@ -143,28 +146,28 @@ public class Server extends WebSocketServer
 	@Override
 	public void onMessage(WebSocket conn, String message)
 	{
-		Client client = getClientFromConn(conn);
-		if (client == null)
-		{
-			return;
-		}
-
-		Log.info("Client message: " + conn.getRemoteSocketAddress() + " - " + message);
-
-		JsonElement jsonElement = new JsonParser().parse(message);
-		if (jsonElement == null)
-		{
-			return;
-		}
-
-		JsonObject jsonObject = jsonElement.getAsJsonObject();
-		if (!jsonObject.has("type"))
-		{
-			return;
-		}
-
 		try
 		{
+			Client client = getClientFromConn(conn);
+			if (client == null)
+			{
+				return;
+			}
+
+			Log.info("Client message: " + conn.getRemoteSocketAddress() + " - " + message);
+
+			JsonElement jsonElement = new JsonParser().parse(message);
+			if (jsonElement == null)
+			{
+				return;
+			}
+
+			JsonObject jsonObject = jsonElement.getAsJsonObject();
+			if (!jsonObject.has("type"))
+			{
+				return;
+			}
+
 			MessageType messageType = MessageType.valueOf(jsonObject.get("type").getAsString());
 
 			switch (messageType)
@@ -199,7 +202,7 @@ public class Server extends WebSocketServer
 					TradeRequestMessage tradeRequest = new Gson().fromJson(jsonElement, TradeRequestMessage.class);
 
 					requests.stream()
-							.filter(r -> r.getMuleRequest().requestId.equals(tradeRequest.requestId))
+							.filter(r -> r.getMuleRequest().requestId.equals(tradeRequest.requestId) && r.getMule() != null)
 							.findFirst()
 							.ifPresent(matchingRequest -> send(conn, new TradeResponseMessage(true, tradeRequest.requestId, matchingRequest.getMule().getPlayerName())));
 
@@ -243,7 +246,7 @@ public class Server extends WebSocketServer
 				break;
 			}
 		}
-		catch (IllegalArgumentException ex)
+		catch (Exception ex)
 		{
 			ex.printStackTrace();
 		}
