@@ -323,13 +323,20 @@ public class Server extends WebSocketServer
 
 	public void send(WebSocket conn, AbstractMessage message)
 	{
-		if (conn.isClosed())
+		try
 		{
-			return;
+			if (conn.isClosing() || conn.isClosed())
+			{
+				return;
+			}
+			String data = message.toJson().toString();
+			Log.info("Sending message to conn: " + conn.getRemoteSocketAddress() + " - " + data);
+			conn.send(data);
 		}
-		String data = message.toJson().toString();
-		Log.info("Sending message to conn: " + conn.getRemoteSocketAddress() + " - " + data);
-		conn.send(data);
+		catch (Exception ex)
+		{
+			ex.printStackTrace();
+		}
 	}
 
 	private Client findMuleForRequest(String group, MuleRequestMessage request)
