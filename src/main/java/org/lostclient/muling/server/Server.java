@@ -108,10 +108,16 @@ public class Server extends WebSocketServer
 	{
 		Log.severe(String.format("Removing client: %s - %s", client, reason));
 
-//		if (client.getConn().isOpen())
-//		{
-//			send(client.getConn(), new TradeCompletedMessage(false, reason, null));
-//		}
+		for (Request request : requests)
+		{
+			if (request.getClient() != client || request.isCompleted())
+			{
+				continue;
+			}
+			TradeCompletedMessage message = new TradeCompletedMessage(false, reason, request.getMuleRequest().requestId);
+			send(client.getConn(), message);
+			send(request.getMule().getConn(), message);
+		}
 
 		clients.remove(client.getConnIndex());
 	}
@@ -232,15 +238,15 @@ public class Server extends WebSocketServer
 							.filter(r -> r.getMuleRequest().requestId.equals(tradeCompleted.requestId))
 							.collect(Collectors.toList());
 
-					for (Request request : matchingRequests)
+					for (Request matchingRequest : matchingRequests)
 					{
 						// if the sender is a mule, forward the same message onto the bots
 						if (client.isMule())
 						{
-							send(request.getClient().getConn(), tradeCompleted);
+							send(matchingRequest.getClient().getConn(), tradeCompleted);
 						}
 
-						requests.remove(request);
+						requests.remove(matchingRequest);
 					}
 				}
 				break;
@@ -255,11 +261,11 @@ public class Server extends WebSocketServer
 							.filter(r -> r.getMuleRequest().playerName.equals(unknownTrader.playerName))
 							.collect(Collectors.toList());
 
-					for (Request request : matchingRequests)
+					for (Request matchingRequest : matchingRequests)
 					{
-						send(request.getClient().getConn(), unknownTrader);
+						send(matchingRequest.getClient().getConn(), unknownTrader);
 
-						requests.remove(request);
+						requests.remove(matchingRequest);
 					}
 				}
 				break;
@@ -277,7 +283,7 @@ public class Server extends WebSocketServer
 				// sent from any client to fetch a list of mules connected to server & all their info
 				case LIST_MULES_REQUEST:
 				{
-//					ListMulesRequestMessage listMulesRequestMessage = new Gson().fromJson(jsonElement, ListMulesRequestMessage.class);
+//					ListMulesRequestMessage listMulesRequest = new Gson().fromJson(jsonElement, ListMulesRequestMessage.class);
 
 					List<Mule> mules = new ArrayList<>();
 
