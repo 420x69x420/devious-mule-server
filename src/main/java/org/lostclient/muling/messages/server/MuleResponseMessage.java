@@ -7,15 +7,15 @@ import org.lostclient.muling.messages.MuleTile;
 public class MuleResponseMessage extends AbstractMessage
 {
 	public final boolean success;
-	public final String requestId;
+	public final String errorMessage;
 	public final int world;
 	public final MuleTile location;
 
-	public MuleResponseMessage(boolean success, String requestId, int world, MuleTile location)
+	public MuleResponseMessage(boolean success, String errorMessage, int world, MuleTile location)
 	{
 		super(MessageType.MULE_RESPONSE);
 		this.success = success;
-		this.requestId = requestId;
+		this.errorMessage = errorMessage;
 		this.world = world;
 		this.location = location;
 	}

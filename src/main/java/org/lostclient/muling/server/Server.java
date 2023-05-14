@@ -4,13 +4,6 @@ import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import java.net.InetSocketAddress;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.stream.Collectors;
 import org.java_websocket.WebSocket;
 import org.java_websocket.handshake.ClientHandshake;
 import org.java_websocket.server.WebSocketServer;
@@ -28,6 +21,14 @@ import org.lostclient.muling.messages.client.TradeRequestMessage;
 import org.lostclient.muling.messages.client.UnknownTraderMessage;
 import org.lostclient.muling.messages.server.MuleResponseMessage;
 import org.lostclient.muling.messages.server.TradeResponseMessage;
+
+import java.net.InetSocketAddress;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
 
 public class Server extends WebSocketServer
 {
@@ -93,13 +94,23 @@ public class Server extends WebSocketServer
 
 	private Client getClientFromConn(WebSocket conn)
 	{
-		if (conn == null) return null;
+		if (conn == null || conn.getAttachment() == null)
+		{
+			return null;
+		}
 		long connIndex = conn.<Long>getAttachment();
 		return clients.getOrDefault(connIndex, null);
 	}
 
-	private void removeClient(Client client)
+	private void removeClient(Client client, String reason)
 	{
+		Log.severe(String.format("Removing client: %s - %s", client, reason));
+
+//		if (client.getConn().isOpen())
+//		{
+//			send(client.getConn(), new TradeCompletedMessage(false, reason, null));
+//		}
+
 		clients.remove(client.getConnIndex());
 	}
 
@@ -128,8 +139,7 @@ public class Server extends WebSocketServer
 		{
 			return;
 		}
-		Log.info("A client disconnected: " + client + " - code: " + code + " - reason: " + reason);
-		removeClient(client);
+		removeClient(client, String.format("Client disconnected: %s - %d - %s", client, code, reason));
 	}
 
 	@Override
@@ -140,7 +150,7 @@ public class Server extends WebSocketServer
 		{
 			return;
 		}
-		Log.info("A client caused an error: " + client + " - " + ex);
+		removeClient(client, String.format("Client disconnected: %s - %s", client, ex));
 	}
 
 	@Override
@@ -172,14 +182,6 @@ public class Server extends WebSocketServer
 
 			switch (messageType)
 			{
-				case OWNED_ITEMS_UPDATE:
-				{
-					OwnedItemsUpdateMessage ownedItemsUpdate = new Gson().fromJson(jsonElement, OwnedItemsUpdateMessage.class);
-					client.getOwnedItems().clear();
-					client.getOwnedItems().addAll(ownedItemsUpdate.ownedItems);
-				}
-				break;
-
 				case MULE_REQUEST:
 				{
 					MuleRequestMessage muleRequest = new Gson().fromJson(jsonElement, MuleRequestMessage.class);
@@ -188,11 +190,11 @@ public class Server extends WebSocketServer
 					Client mule = findMuleForRequest(client.getGroup(), muleRequest);
 					if (mule == null)
 					{
-						send(conn, new MuleResponseMessage(false, muleRequest.requestId, 0, null));
+						send(conn, new MuleResponseMessage(false, "Failed to find a mule to handle the request", 0, null));
 						return;
 					}
 					requests.add(new Request(client, mule, muleRequest));
-					send(conn, new MuleResponseMessage(true, muleRequest.requestId, mule.getWorldId(), mule.getTile()));
+					send(conn, new MuleResponseMessage(true, null, mule.getWorldId(), mule.getTile()));
 					send(mule.getConn(), muleRequest);
 				}
 				break;
@@ -205,10 +207,10 @@ public class Server extends WebSocketServer
 							.filter(r -> r.getMuleRequest().requestId.equals(tradeRequest.requestId) && r.getMule() != null)
 							.findFirst()
 							.ifPresent(matchingRequest -> send(conn, new TradeResponseMessage(true, tradeRequest.requestId, matchingRequest.getMule().getPlayerName())));
-
 				}
 				break;
 
+				// sent from both client and mule for when a trade is completed, successful or not
 				case TRADE_COMPLETED:
 				{
 					TradeCompletedMessage tradeCompleted = new Gson().fromJson(jsonElement, TradeCompletedMessage.class);
@@ -220,6 +222,7 @@ public class Server extends WebSocketServer
 
 					for (Request request : matchingRequests)
 					{
+						// if the sender is a mule, forward the same message onto the bots
 						if (client.isMule())
 						{
 							send(request.getClient().getConn(), tradeCompleted);
@@ -229,6 +232,7 @@ public class Server extends WebSocketServer
 				}
 				break;
 
+				// sent from mule when traded from an unknown player, message contains trading player name
 				case UNKNOWN_TRADER:
 				{
 					UnknownTraderMessage unknownTrader = new Gson().fromJson(jsonElement, UnknownTraderMessage.class);
@@ -241,7 +245,17 @@ public class Server extends WebSocketServer
 					for (Request request : matchingRequests)
 					{
 						send(request.getClient().getConn(), unknownTrader);
+						requests.remove(request);
 					}
+				}
+				break;
+
+				// sent from mule whenever inventory changes happen or trades are completed
+				case OWNED_ITEMS_UPDATE:
+				{
+					OwnedItemsUpdateMessage ownedItemsUpdate = new Gson().fromJson(jsonElement, OwnedItemsUpdateMessage.class);
+					client.getOwnedItems().clear();
+					client.getOwnedItems().addAll(ownedItemsUpdate.ownedItems);
 				}
 				break;
 			}
@@ -278,7 +292,8 @@ public class Server extends WebSocketServer
 				continue;
 			}
 
-			if (request.requiredItems.size() > 0 && !client.hasRequiredItems(request.requiredItems))
+			if (request.requiredItems.size() > 0 && !client.hasRequiredItems(request.requiredItems, requests.stream()
+					.filter(r -> r.getClient() != client).collect(Collectors.toList())))
 			{
 				continue;
 			}

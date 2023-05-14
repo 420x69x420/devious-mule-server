@@ -8,7 +8,9 @@ import org.lostclient.muling.messages.MuleTile;
 import org.lostclient.muling.messages.OwnedItem;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Getter
 @Setter
@@ -41,15 +43,31 @@ public class Client
 		this.isMember = isMember;
 	}
 
-	public boolean hasRequiredItems(List<RequiredItem> requiredItems)
+	public boolean hasRequiredItems(List<RequiredItem> requiredItems, List<Request> otherRequests)
 	{
+		Map<Integer, Integer> otherRequestCounts = new HashMap<>();
+		for (Request otherRequest : otherRequests)
+		{
+			otherRequest.getMuleRequest().requiredItems.forEach(i ->
+					otherRequestCounts.put(i.getItemId(), i.getQuantity() + otherRequestCounts.getOrDefault(i.getItemId(), 0)));
+		}
 		for (RequiredItem requiredItem : requiredItems)
 		{
-			if (ownedItems.stream().noneMatch(ownedItem -> ownedItem.getItemId() == requiredItem.getItemId() && ownedItem.getQuantity() >= requiredItem.getQuantity()))
+			if (ownedItems.stream().noneMatch(ownedItem ->
+			{
+				int ownedQuantity = ownedItem.getQuantity() - otherRequestCounts.getOrDefault(ownedItem.getItemId(), 0);
+				return ownedItem.getItemId() == requiredItem.getItemId() && ownedQuantity >= requiredItem.getQuantity();
+			}))
 			{
 				return false;
 			}
 		}
 		return true;
+	}
+
+	@Override
+	public boolean equals(Object other)
+	{
+		return other instanceof Client && ((Client) other).connIndex == connIndex;
 	}
 }
