@@ -13,12 +13,14 @@ import org.lostclient.muling.Random;
 import org.lostclient.muling.Request;
 import org.lostclient.muling.messages.AbstractMessage;
 import org.lostclient.muling.messages.MessageType;
+import org.lostclient.muling.messages.Mule;
 import org.lostclient.muling.messages.MuleTile;
 import org.lostclient.muling.messages.client.MuleRequestMessage;
 import org.lostclient.muling.messages.client.OwnedItemsUpdateMessage;
 import org.lostclient.muling.messages.client.TradeCompletedMessage;
 import org.lostclient.muling.messages.client.TradeRequestMessage;
 import org.lostclient.muling.messages.client.UnknownTraderMessage;
+import org.lostclient.muling.messages.server.ListMulesResponseMessage;
 import org.lostclient.muling.messages.server.MuleResponseMessage;
 import org.lostclient.muling.messages.server.TradeResponseMessage;
 
@@ -193,7 +195,9 @@ public class Server extends WebSocketServer
 						send(conn, new MuleResponseMessage(false, "Failed to find a mule to handle the request", 0, null));
 						return;
 					}
+
 					requests.add(new Request(client, mule, muleRequest));
+
 					send(conn, new MuleResponseMessage(true, null, mule.getWorldId(), mule.getTile()));
 					send(mule.getConn(), muleRequest);
 				}
@@ -203,10 +207,18 @@ public class Server extends WebSocketServer
 				{
 					TradeRequestMessage tradeRequest = new Gson().fromJson(jsonElement, TradeRequestMessage.class);
 
-					requests.stream()
+					Request matchingRequest = requests.stream()
 							.filter(r -> r.getMuleRequest().requestId.equals(tradeRequest.requestId) && r.getMule() != null)
 							.findFirst()
-							.ifPresent(matchingRequest -> send(conn, new TradeResponseMessage(true, tradeRequest.requestId, matchingRequest.getMule().getPlayerName())));
+							.orElse(null);
+
+					if (matchingRequest == null)
+					{
+						send(conn, new TradeResponseMessage(false, "Failed to find matching request with id", tradeRequest.requestId,  null));
+						return;
+					}
+
+					send(conn, new TradeResponseMessage(true, null, tradeRequest.requestId, matchingRequest.getMule().getPlayerName()));
 				}
 				break;
 
@@ -227,6 +239,7 @@ public class Server extends WebSocketServer
 						{
 							send(request.getClient().getConn(), tradeCompleted);
 						}
+
 						requests.remove(request);
 					}
 				}
@@ -245,6 +258,7 @@ public class Server extends WebSocketServer
 					for (Request request : matchingRequests)
 					{
 						send(request.getClient().getConn(), unknownTrader);
+
 						requests.remove(request);
 					}
 				}
@@ -254,8 +268,43 @@ public class Server extends WebSocketServer
 				case OWNED_ITEMS_UPDATE:
 				{
 					OwnedItemsUpdateMessage ownedItemsUpdate = new Gson().fromJson(jsonElement, OwnedItemsUpdateMessage.class);
+
 					client.getOwnedItems().clear();
 					client.getOwnedItems().addAll(ownedItemsUpdate.ownedItems);
+				}
+				break;
+
+				// sent from any client to fetch a list of mules connected to server & all their info
+				case LIST_MULES_REQUEST:
+				{
+//					ListMulesRequestMessage listMulesRequestMessage = new Gson().fromJson(jsonElement, ListMulesRequestMessage.class);
+
+					List<Mule> mules = new ArrayList<>();
+
+					for (Client muleClient : clients.values())
+					{
+						if (!muleClient.isMule())
+						{
+							continue;
+						}
+
+						List<Request> muleRequests = requests.stream()
+								.filter(r -> r.getMule() == muleClient)
+								.collect(Collectors.toList());
+
+						mules.add(new Mule(
+								muleClient.getPlayerName(),
+								muleClient.getGroup(),
+								muleClient.getWorldId(),
+								muleClient.getTile(),
+								muleClient.isMember(),
+								muleClient.getOwnedItems(),
+								muleClient.getRemainingItems(muleRequests),
+								muleRequests.size()
+						));
+					}
+
+					send(conn, new ListMulesResponseMessage(true, null, mules));
 				}
 				break;
 			}
@@ -293,7 +342,8 @@ public class Server extends WebSocketServer
 			}
 
 			if (request.requiredItems.size() > 0 && !client.hasRequiredItems(request.requiredItems, requests.stream()
-					.filter(r -> r.getClient() != client).collect(Collectors.toList())))
+					.filter(r -> r.getMule() == client)
+					.collect(Collectors.toList())))
 			{
 				continue;
 			}

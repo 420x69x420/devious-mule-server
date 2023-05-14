@@ -43,26 +43,51 @@ public class Client
 		this.isMember = isMember;
 	}
 
-	public boolean hasRequiredItems(List<RequiredItem> requiredItems, List<Request> otherRequests)
+	public boolean hasRequiredItems(List<RequiredItem> requiredItems, List<Request> requests)
 	{
-		Map<Integer, Integer> otherRequestCounts = new HashMap<>();
-		for (Request otherRequest : otherRequests)
+		Map<Integer, Integer> requestCounts = new HashMap<>();
+		for (Request request : requests)
 		{
-			otherRequest.getMuleRequest().requiredItems.forEach(i ->
-					otherRequestCounts.put(i.getItemId(), i.getQuantity() + otherRequestCounts.getOrDefault(i.getItemId(), 0)));
+			request.getMuleRequest().requiredItems.forEach(i ->
+					requestCounts.put(i.getItemId(), i.getQuantity() + requestCounts.getOrDefault(i.getItemId(), 0)));
 		}
+
 		for (RequiredItem requiredItem : requiredItems)
 		{
-			if (ownedItems.stream().noneMatch(ownedItem ->
+			if (getOwnedItems().stream().noneMatch(ownedItem ->
 			{
-				int ownedQuantity = ownedItem.getQuantity() - otherRequestCounts.getOrDefault(ownedItem.getItemId(), 0);
+				int ownedQuantity = ownedItem.getQuantity() - requestCounts.getOrDefault(ownedItem.getItemId(), 0);
 				return ownedItem.getItemId() == requiredItem.getItemId() && ownedQuantity >= requiredItem.getQuantity();
 			}))
 			{
 				return false;
 			}
 		}
+
 		return true;
+	}
+
+	public List<OwnedItem> getRemainingItems(List<Request> requests)
+	{
+		Map<Integer, Integer> requestCounts = new HashMap<>();
+		for (Request request : requests)
+		{
+			request.getMuleRequest().requiredItems.forEach(i ->
+					requestCounts.put(i.getItemId(), i.getQuantity() + requestCounts.getOrDefault(i.getItemId(), 0)));
+		}
+
+		List<OwnedItem> remainingItems = new ArrayList<>();
+
+		for (OwnedItem ownedItem : getOwnedItems())
+		{
+			int ownedQuantity = ownedItem.getQuantity() - requestCounts.getOrDefault(ownedItem.getItemId(), 0);
+			remainingItems.add(new OwnedItem(
+					ownedItem.getItemId(),
+					ownedQuantity
+			));
+		}
+
+		return remainingItems;
 	}
 
 	@Override
