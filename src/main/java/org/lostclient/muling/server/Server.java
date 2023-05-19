@@ -55,7 +55,8 @@ public class Server extends WebSocketServer
 		}
 
 		String clientUsername = handshake.getFieldValue("clientUsername");
-		String group = handshake.getFieldValue("group").length() > 0 ? handshake.getFieldValue("group") : "default";
+		String[] groups = handshake.getFieldValue("groups").length() > 0 ? handshake.getFieldValue("groups").split(",") : new String[] {"default"};
+		int queueSize = handshake.getFieldValue("queueSize").length() > 0 ? Integer.parseInt(handshake.getFieldValue("queueSize")) : 0;
 		String playerName = handshake.getFieldValue("playerName");
 		boolean isMule = handshake.getFieldValue("isMule").equals("true");
 		boolean isMember = handshake.getFieldValue("isMember").equals("true");
@@ -82,7 +83,7 @@ public class Server extends WebSocketServer
 
 		conn.setAttachment(connIndex);
 
-		Client client = new Client(conn, connIndex, System.currentTimeMillis(), clientUsername, group, playerName, isMule, isMember);
+		Client client = new Client(conn, connIndex, System.currentTimeMillis(), clientUsername, groups, queueSize, playerName, isMule, isMember);
 
 		client.setWorldId(muleWorldId);
 		client.setTile(muleTile);
@@ -106,7 +107,7 @@ public class Server extends WebSocketServer
 
 	private void removeClient(Client client, String reason)
 	{
-		Log.severe(String.format("Removing client: %s - %s", client, reason));
+		Log.severe(client.getLoggingPrefix(), String.format("Removing client: %s - %s", client, reason));
 
 		for (Request request : requests)
 		{
@@ -136,7 +137,7 @@ public class Server extends WebSocketServer
 		{
 			return;
 		}
-		Log.info("A client connected: " + client);
+		Log.info(client.getLoggingPrefix(), "Connected to server: " + client);
 	}
 
 	@Override
@@ -147,7 +148,7 @@ public class Server extends WebSocketServer
 		{
 			return;
 		}
-		removeClient(client, String.format("Client disconnected: %s - %d - %s", client, code, reason));
+		removeClient(client, String.format("Disconnected from server: %d - %s", code, reason));
 	}
 
 	@Override
@@ -158,7 +159,7 @@ public class Server extends WebSocketServer
 		{
 			return;
 		}
-		removeClient(client, String.format("Client disconnected: %s - %s", client, ex));
+		removeClient(client, String.format("Disconnected from server: %s", ex));
 	}
 
 	@Override
@@ -195,7 +196,7 @@ public class Server extends WebSocketServer
 					MuleRequestMessage muleRequest = new Gson().fromJson(jsonElement, MuleRequestMessage.class);
 					requests.removeIf(request -> request.getMuleRequest().playerName.equals(muleRequest.playerName));
 
-					Client mule = findMuleForRequest(client.getGroup(), muleRequest);
+					Client mule = findMuleForRequest(client.getGroups(), muleRequest);
 					if (mule == null)
 					{
 						send(conn, new MuleResponseMessage(false, "Failed to find a mule to handle the request", 0, null));
@@ -300,12 +301,13 @@ public class Server extends WebSocketServer
 
 						mules.add(new Mule(
 								muleClient.getPlayerName(),
-								muleClient.getGroup(),
+								muleClient.getGroups(),
 								muleClient.getWorldId(),
 								muleClient.getTile(),
 								muleClient.isMember(),
 								muleClient.getOwnedItems(),
 								muleClient.getRemainingItems(muleRequests),
+								muleClient.getQueueSize(),
 								muleRequests.size()
 						));
 					}
@@ -339,29 +341,45 @@ public class Server extends WebSocketServer
 		}
 	}
 
-	private Client findMuleForRequest(String group, MuleRequestMessage request)
+	private Client findMuleForRequest(String[] groups, MuleRequestMessage request)
 	{
 		List<Client> validMules = new ArrayList<>();
-		for (Client client : clients.values())
+		for (Client muleClient : clients.values())
 		{
-			if (!client.isMule())
+			if (!muleClient.isMule())
 			{
 				continue;
 			}
 
-			if (!client.getGroup().equals(group))
+			if (!muleClient.isInGroup(groups))
 			{
 				continue;
 			}
 
-			if (request.requiredItems.size() > 0 && !client.hasRequiredItems(request.requiredItems, requests.stream()
-					.filter(r -> r.getMule() == client)
+			if (request.muleName != null && !muleClient.getPlayerName().equalsIgnoreCase(request.muleName))
+			{
+				continue;
+			}
+
+			if (muleClient.getQueueSize() > 0)
+			{
+				List<Request> muleRequests = requests.stream()
+						.filter(r -> r.getMule() == muleClient)
+						.collect(Collectors.toList());
+				if (muleRequests.size() >= muleClient.getQueueSize())
+				{
+					continue;
+				}
+			}
+
+			if (request.requiredItems.size() > 0 && !muleClient.hasRequiredItems(request.requiredItems, requests.stream()
+					.filter(r -> r.getMule() == muleClient)
 					.collect(Collectors.toList())))
 			{
 				continue;
 			}
 
-			validMules.add(client);
+			validMules.add(muleClient);
 		}
 		if (validMules.size() == 0)
 		{

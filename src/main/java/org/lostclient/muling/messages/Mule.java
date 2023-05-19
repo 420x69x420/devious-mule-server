@@ -10,11 +10,12 @@ import java.util.List;
 public class Mule
 {
 	public String playerName;
-	public String group;
+	public String[] groups;
 	public int worldId;
 	public MuleTile tile;
 	public boolean member;
 	public List<OwnedItem> ownedItems;
 	public List<OwnedItem> remainingItems;
+	public int queueSize;
 	public int requestCount;
 }

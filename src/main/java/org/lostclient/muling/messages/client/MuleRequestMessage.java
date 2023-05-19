@@ -15,8 +15,9 @@ public class MuleRequestMessage extends AbstractMessage
 	public final boolean hasMembership;
 	public final List<RequiredItem> requiredItems;
 	public final List<OfferedItem> offeredItems;
+	public final String muleName;
 
-	public MuleRequestMessage(String requestId, long requestedAt, String playerName, boolean hasMembership, List<RequiredItem> requiredItems, List<OfferedItem> offeredItems)
+	public MuleRequestMessage(String requestId, long requestedAt, String playerName, boolean hasMembership, List<RequiredItem> requiredItems, List<OfferedItem> offeredItems, String muleName)
 	{
 		super(MessageType.MULE_REQUEST);
 		this.requestId = requestId;
@@ -25,5 +26,6 @@ public class MuleRequestMessage extends AbstractMessage
 		this.hasMembership = hasMembership;
 		this.requiredItems = requiredItems;
 		this.offeredItems = offeredItems;
+		this.muleName = muleName;
 	}
 }

@@ -22,7 +22,8 @@ public class Client
 	private final long connectedAt;
 	private final String address;
 	private final String clientUsername;
-	private final String group;
+	private final String[] groups;
+	private final int queueSize;
 	private final String playerName;
 	private final boolean isMule;
 	private final boolean isMember;
@@ -30,14 +31,15 @@ public class Client
 	private MuleTile tile;
 	private final List<OwnedItem> ownedItems = new ArrayList<>();
 
-	public Client(WebSocket conn, long connIndex, long connectedAt, String clientUsername, String group, String playerName, boolean isMule, boolean isMember)
+	public Client(WebSocket conn, long connIndex, long connectedAt, String clientUsername, String[] groups, int queueSize, String playerName, boolean isMule, boolean isMember)
 	{
 		this.conn = conn;
 		this.connIndex = connIndex;
 		this.connectedAt = connectedAt;
 		this.address = conn.getRemoteSocketAddress().toString();
 		this.clientUsername = clientUsername;
-		this.group = group;
+		this.groups = groups;
+		this.queueSize = queueSize;
 		this.playerName = playerName;
 		this.isMule = isMule;
 		this.isMember = isMember;
@@ -88,6 +90,26 @@ public class Client
 		}
 
 		return remainingItems;
+	}
+
+	public String getLoggingPrefix()
+	{
+		return String.format("Client-%d", connIndex);
+	}
+
+	public boolean isInGroup(String[] checkGroups)
+	{
+		for (String group : groups)
+		{
+			for (String checkGroup : checkGroups)
+			{
+				if (group.equalsIgnoreCase(checkGroup))
+				{
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	@Override
