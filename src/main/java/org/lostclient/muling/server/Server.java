@@ -262,9 +262,10 @@ public class Server extends WebSocketServer
 							.filter(r -> r.getMuleRequest().playerName.equals(unknownTrader.playerName))
 							.collect(Collectors.toList());
 
+					// send the request back to the mule to confirm that it is a valid bot and then remove the bot from our requests queue
 					for (Request matchingRequest : matchingRequests)
 					{
-						send(matchingRequest.getClient().getConn(), unknownTrader);
+						send(matchingRequest.getMule().getConn(), unknownTrader);
 
 						requests.remove(matchingRequest);
 					}
